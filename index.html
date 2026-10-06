@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Application: Head Injury Management in UK EDs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Calm Clinical (Background: #F8F9FA, Cards: #FFFFFF, Main Text: #343A40, Accent: #5C8D89, Highlight: #495057) -->
+    <!-- Application Structure Plan: The application uses a thematic, single-page scrolling structure designed for intuitive exploration, moving from general context to specific clinical pathways. The structure is: 1) High-level stats, 2) Core Assessment Pathway (ABCDE), 3) An interactive CT Decision Hub to explore NICE guidelines, 4) Spotlight sections on special populations (Paediatrics, Anticoagulated, Older Adults - Falls Rule), and 5) A look at emerging diagnostics (Biomarkers). This user-centric flow is more navigable and digestible than the report's linear academic format, allowing clinicians to quickly access the information they need. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Annual ED Attendances -> Goal: Inform -> Viz: 'Big Number' stat (HTML/CSS) -> Interaction: None -> Justification: High impact, immediately conveys scale -> Library/Method: HTML/CSS.
+        - Report Info: Injury Severity Stats -> Goal: Inform -> Viz: Donut Chart -> Interaction: Hover Tooltip -> Justification: Clearly shows proportions of a whole -> Library/Method: Chart.js/Canvas.
+        - Report Info: ABCDE Survey -> Goal: Organize -> Viz: Styled Flowchart -> Interaction: None -> Justification: Visually represents a sequential process -> Library/Method: HTML/CSS with Flexbox.
+        - Report Info: NICE CT Criteria -> Goal: Inform/Organize -> Viz: Tabbed Interface -> Interaction: Click tabs to switch content -> Justification: Segments complex rules for adults vs. children, reducing cognitive load -> Library/Method: Vanilla JS + HTML/CSS.
+        - Report Info: Paediatric CDRs -> Goal: Compare -> Viz: Bar Chart -> Interaction: Hover Tooltip -> Justification: Directly compares the sensitivity of different clinical rules -> Library/Method: Chart.js/Canvas.
+        - Report Info: Falls Decision Rule -> Goal: Inform/Organize -> Viz: Textual list with explanation -> Interaction: None -> Justification: Presents clear criteria for a specific patient group, supported by recent evidence -> Library/Method: HTML/CSS.
+        - Report Info: Biomarker Impact -> Goal: Inform -> Viz: 'Big Number' stat -> Interaction: None -> Justification: Highlights a key future-facing statistic -> Library/Method: HTML/CSS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8F9FA;
+            color: #343A40;
+        }
+        .app-card {
+            background-color: #FFFFFF;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .app-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 300px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 320px;
+                max-height: 320px;
+            }
+        }
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .tab-btn.active {
+            background-color: #5C8D89;
+            color: #FFFFFF;
+        }
+        .tab-btn:not(.active) {
+            background-color: #E9ECEF;
+            color: #495057;
+        }
+        .tab-btn:not(.active):hover {
+            background-color: #DEE2E6;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .flow-step {
+            display: flex;
+            align-items: center;
+        }
+        .flow-icon {
+            flex-shrink: 0;
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 9999px;
+            background-color: #E9ECEF;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.5rem;
+            margin-right: 1rem;
+            border: 2px solid #DEE2E6;
+        }
+        .flow-line {
+            height: 2rem;
+            width: 2px;
+            background-color: #DEE2E6;
+            margin: 0.5rem 0 0.5rem 1.7rem;
+        }
+    </style>
+</head>
+<body class="antialiased leading-relaxed">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800 mb-3">UK Head Injury Assessment Pathway</h1>
+            <p class="text-lg text-gray-600 max-w-3xl mx-auto">An interactive tool for exploring UK guidelines on head injury management in the Emergency Department, synthesising NICE guidance and recent evidence.</p>
+        </header>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-center mb-2 text-gray-700">The National Context</h2>
+            <p class="text-center text-gray-500 mb-8 max-w-2xl mx-auto">Head injuries are a major public health issue, with distinct patterns in severity and demographics. Understanding this landscape is key to appreciating the rationale behind standardised ED management protocols.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="app-card p-6 text-center flex flex-col justify-center">
+                    <span class="text-6xl font-bold" style="color: #5C8D89;">1M+</span>
+                    <h3 class="text-xl font-semibold mt-2 text-gray-700">Annual ED Attendances</h3>
+                    <p class="text-sm text-gray-500 mt-1">A ubiquitous presenting complaint in UK Emergency Departments.</p>
+                </div>
+                <div class="app-card p-6">
+                    <h3 class="text-xl font-semibold mt-2 text-gray-700 text-center mb-4">Injury Severity Profile</h3>
+                    <div class="chart-container">
+                        <canvas id="severityChart"></canvas>
+                    </div>
+                </div>
+                <div class="app-card p-6 flex flex-col justify-center">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-4">Key Demographics at Risk</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center">
+                            <span class="text-4xl mr-4" role="img" aria-label="older adult">👴</span>
+                            <div>
+                                <p class="font-semibold text-gray-800">Older Adults (65+)</p>
+                                <p class="text-sm text-gray-500">A growing cohort, primarily due to falls, with higher risk of adverse outcomes.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-4xl mr-4" role="img" aria-label="child">👶</span>
+                            <div>
+                                <p class="font-semibold text-gray-800">Children (&lt;15)</p>
+                                <p class="text-sm text-gray-500">Represent 33-50% of all cases, with specific assessment needs.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <div class="app-card p-6 lg:p-8">
+                <h2 class="text-2xl font-bold text-center mb-2 text-gray-700">The Initial Assessment Pathway</h2>
+                <p class="text-center text-gray-500 mb-8 max-w-2xl mx-auto">Effective management starts with a rapid, systematic primary survey to identify and address life-threatening conditions, preventing secondary brain injury. This adheres to ATLS principles.</p>
+                <div class="max-w-md mx-auto">
+                    <div class="flow-step">
+                        <div class="flow-icon">A</div>
+                        <div>
+                            <h4 class="font-semibold text-lg text-gray-800">Airway & C-Spine</h4>
+                            <p class="text-sm text-gray-600">Secure airway with cervical spine protection.</p>
+                        </div>
+                    </div>
+                    <div class="flow-line"></div>
+                    <div class="flow-step">
+                        <div class="flow-icon">B</div>
+                        <div>
+                            <h4 class="font-semibold text-lg text-gray-800">Breathing</h4>
+                            <p class="text-sm text-gray-600">Assess ventilation and provide oxygen.</p>
+                        </div>
+                    </div>
+                    <div class="flow-line"></div>
+                    <div class="flow-step">
+                        <div class="flow-icon">C</div>
+                        <div>
+                            <h4 class="font-semibold text-lg text-gray-800">Circulation</h4>
+                            <p class="text-sm text-gray-600">Prevent hypotension to maintain cerebral perfusion.</p>
+                        </div>
+                    </div>
+                    <div class="flow-line"></div>
+                    <div class="flow-step">
+                        <div class="flow-icon">D</div>
+                        <div>
+                            <h4 class="font-semibold text-lg text-gray-800">Disability</h4>
+                            <p class="text-sm text-gray-600">Assess GCS, pupils, and focal neurology.</p>
+                        </div>
+                    </div>
+                    <div class="flow-line"></div>
+                    <div class="flow-step">
+                        <div class="flow-icon">E</div>
+                        <div>
+                            <h4 class="font-semibold text-lg text-gray-800">Exposure</h4>
+                            <p class="text-sm text-gray-600">Examine for associated injuries.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <div class="app-card p-6 lg:p-8">
+                <h2 class="text-2xl font-bold text-center mb-2 text-gray-700">Interactive CT Scan Decision Hub</h2>
+                <p class="text-center text-gray-500 mb-8 max-w-3xl mx-auto">Judicious use of CT imaging is critical. Use this tool to explore the NICE guidelines for determining which patients require a scan and within what timeframe. Select a population to view the specific criteria.</p>
+                <div class="flex justify-center space-x-2 md:space-x-4 mb-8">
+                    <button id="adults-btn" class="tab-btn active">Adults (≥16)</button>
+                    <button id="children-btn" class="tab-btn">Children (&lt;16)</button>
+                </div>
+                
+                <div id="adults-content" class="tab-content active">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-gray-50 p-6 rounded-lg border">
+                            <h3 class="font-bold text-lg mb-3" style="color: #5C8D89;">Scan within 1 hour if ANY factor present:</h3>
+                            <ul class="list-disc list-outside ml-5 space-y-2 text-gray-600">
+                                <li>GCS < 13 on initial assessment</li>
+                                <li>GCS < 15 at 2 hours post-injury</li>
+                                <li>Suspected open or depressed skull fracture</li>
+                                <li>Any sign of basal skull fracture (e.g., panda eyes)</li>
+                                <li>Post-traumatic seizure</li>
+                                <li>Focal neurological deficit</li>
+                                <li>More than one episode of vomiting</li>
+                            </ul>
+                        </div>
+                        <div class="bg-gray-50 p-6 rounded-lg border">
+                            <h3 class="font-bold text-lg mb-3" style="color: #5C8D89;">Scan within 8 hours if LOC or amnesia AND:</h3>
+                             <ul class="list-disc list-outside ml-5 space-y-2 text-gray-600">
+                                <li>Age 65 years or over</li>
+                                <li>History of bleeding or clotting disorders</li>
+                                <li>Dangerous mechanism of injury (e.g., fall >1m)</li>
+                                <li>>30 mins retrograde amnesia before injury</li>
+                            </ul>
+                            <p class="text-sm mt-4 text-gray-500">Note: Also consider a scan within 8 hours for patients on anticoagulants/antiplatelets without LOC or amnesia.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="children-content" class="tab-content">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-gray-50 p-6 rounded-lg border">
+                            <h3 class="font-bold text-lg mb-3" style="color: #5C8D89;">Scan within 1 hour if ANY factor present:</h3>
+                            <ul class="list-disc list-outside ml-5 space-y-2 text-gray-600">
+                                <li>Suspicion of non-accidental injury</li>
+                                <li>Post-traumatic seizure (no epilepsy hx)</li>
+                                <li>GCS < 14 (or < 15 if < 1yr)</li>
+                                <li>GCS < 15 at 2 hours post-injury</li>
+                                <li>Suspected open/depressed skull fracture or tense fontanelle</li>
+                                <li>Any sign of basal skull fracture</li>
+                                <li>Focal neurological deficit</li>
+                                <li>Bruise/swelling/laceration >5cm (if < 1yr)</li>
+                            </ul>
+                        </div>
+                        <div class="bg-gray-50 p-6 rounded-lg border">
+                           <h3 class="font-bold text-lg mb-3" style="color: #5C8D89;">Observe for 4 hours if ONLY ONE of these:</h3>
+                             <ul class="list-disc list-outside ml-5 space-y-2 text-gray-600">
+                                <li>Witnessed LOC > 5 minutes</li>
+                                <li>Abnormal drowsiness</li>
+                                <li>≥3 discrete episodes of vomiting</li>
+                                <li>Dangerous mechanism of injury</li>
+                                <li>Amnesia > 5 minutes</li>
+                                <li>Any bleeding or clotting disorder</li>
+                             </ul>
+                              <p class="text-sm mt-4 text-gray-500">If deterioration occurs during observation (e.g., further vomiting, GCS drops), scan within 1 hour.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-center mb-2 text-gray-700">Spotlight on Vulnerable Populations</h2>
+            <p class="text-center text-gray-500 mb-8 max-w-2xl mx-auto">Specific patient groups require tailored assessment and management strategies due to their unique physiological characteristics and risk profiles.</p>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="app-card p-6">
+                    <h3 class="text-xl font-semibold mt-2 text-gray-700 mb-4">Paediatric Care & Clinical Decision Rules</h3>
+                    <p class="text-gray-600 text-sm mb-4">To minimise radiation in children, clinical decision rules (CDRs) help identify those at very low risk of significant injury. Studies show high sensitivity for rules like CHALICE and PECARN in detecting clinically important traumatic brain injuries (ciTBI).</p>
+                    <div class="chart-container">
+                        <canvas id="cdrChart"></canvas>
+                    </div>
+                </div>
+                <div class="app-card p-6">
+                    <h3 class="text-xl font-semibold mt-2 text-gray-700 mb-4">Anticoagulated Patients: High Risk</h3>
+                    <p class="text-gray-600 text-sm mb-4">Patients on anticoagulants or antiplatelets have a much higher risk of intracranial haemorrhage, even from minor trauma, necessitating a low threshold for CT scanning and a clear plan for rapid reversal if bleeding is confirmed.</p>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="font-semibold text-gray-800">Warfarin Reversal:</p>
+                            <p class="text-sm text-gray-600">IV Vitamin K + Prothrombin Complex Concentrate (PCC).</p>
+                        </div>
+                        <div>
+                            <p class="font-semibold text-gray-800">DOAC Reversal:</p>
+                            <p class="text-sm text-gray-600">Specific agents (Andexanet Alfa, Idarucizumab) or PCC.</p>
+                        </div>
+                        <div>
+                            <p class="font-semibold text-gray-800">Antiplatelet Management:</p>
+                            <p class="text-sm text-gray-600">No specific reversal. Consider platelet transfusion for critical bleeding.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="app-card p-6">
+                    <h3 class="text-xl font-semibold mt-2 text-gray-700 mb-4">Falls Decision Rule: Older Adults</h3>
+                    <p class="text-gray-600 text-sm mb-4">This rule aims to safely reduce unnecessary head CT scans in older adults (≥65) after ground-level falls. A recent validation study in the Canadian Emergency Medicine Journal (May 2025) confirmed its high sensitivity (98.0%) and negative predictive value (99.6%), potentially reducing CTs by ~32%.</p>
+                    <p class="font-semibold text-gray-800 mt-4 mb-2">Consider NO CT if ALL criteria met:</p>
+                    <ul class="list-disc list-outside ml-5 space-y-2 text-gray-600 text-sm">
+                        <li>No history of head injury on falling (patient/witness).</li>
+                        <li>No new neurological abnormalities.</li>
+                        <li>Patient recalls events surrounding the fall (no amnesia).</li>
+                        <li>Clinical Frailty Scale (CFS) score less than 5.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+        
+        <section>
+            <div class="app-card bg-gray-700 text-white p-8 text-center">
+                 <h2 class="text-2xl font-bold mb-4">The Future: Blood Biomarkers</h2>
+                 <p class="mb-4 opacity-80 max-w-xl mx-auto">The emergence of blood tests to detect brain-specific proteins (GFAP & UCH-L1) has the potential to revolutionise mild head injury assessment, helping to rule out significant injury without imaging.</p>
+                 <div class="text-6xl font-bold" style="color:#A7C4C2;">~31%</div>
+                 <p class="font-semibold text-lg opacity-90">Potential Reduction in CT Scans</p>
+                 <p class="text-xs opacity-70 mt-1">Based on studies showing high sensitivity for ruling out intracranial lesions.</p>
+            </div>
+        </section>
+
+        <footer class="text-center mt-12 text-xs text-gray-500">
+            <p>This interactive application synthesises information from the UK National Institute for Health and Care Excellence (NICE) and associated clinical research for educational purposes.</p>
+            <p>It is not a substitute for professional clinical judgement.</p>
+        </footer>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            const tooltipTitleCallback = (tooltipItems) => {
+                const item = tooltipItems[0];
+                let label = item.chart.data.labels[item.dataIndex];
+                if (Array.isArray(label)) {
+                    return label.join(' ');
+                }
+                return label;
+            };
+
+            const wrapLabel = (label, maxLength = 16) => {
+                if (typeof label !== 'string' || label.length <= maxLength) {
+                    return label;
+                }
+                const words = label.split(' ');
+                const lines = [];
+                let currentLine = '';
+                words.forEach(word => {
+                    if ((currentLine + ' ' + word).trim().length > maxLength) {
+                        lines.push(currentLine.trim());
+                        currentLine = word;
+                    } else {
+                        currentLine = (currentLine + ' ' + word).trim();
+                    }
+                });
+                if (currentLine) {
+                    lines.push(currentLine.trim());
+                }
+                return lines;
+            };
+
+            const defaultChartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#495057',
+                            font: { family: "'Inter', sans-serif", size: 12 },
+                            boxWidth: 15,
+                            padding: 20
+                        }
+                    },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        titleFont: { family: "'Inter', sans-serif", weight: 'bold' },
+                        bodyFont: { family: "'Inter', sans-serif" },
+                        callbacks: { title: tooltipTitleCallback }
+                    }
+                },
+                 scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#E9ECEF' },
+                        ticks: { color: '#495057', font: { family: "'Inter', sans-serif" } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#495057', font: { family: "'Inter', sans-serif" } }
+                    }
+                }
+            };
+            
+            const severityCtx = document.getElementById('severityChart');
+            if(severityCtx) {
+                new Chart(severityCtx.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Mild (GCS 13-15)', 'Moderate/Severe (GCS <13)'],
+                        datasets: [{
+                            data: [92.5, 7.5],
+                            backgroundColor: ['#5C8D89', '#ADB5BD'],
+                            borderColor: '#FFFFFF',
+                            borderWidth: 4,
+                            hoverOffset: 8
+                        }]
+                    },
+                    options: { ...defaultChartOptions, cutout: '60%' }
+                });
+            }
+
+            const cdrCtx = document.getElementById('cdrChart');
+            if(cdrCtx) {
+                new Chart(cdrCtx.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['CHALICE', 'PECARN', 'CATCH'],
+                        datasets: [{
+                            label: 'Sensitivity for ciTBI (%)',
+                            data: [89.5, 84.5, 50.0],
+                            backgroundColor: '#5C8D89',
+                            borderColor: '#4A706E',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            barPercentage: 0.6
+                        }]
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                         indexAxis: 'y',
+                         plugins: { ...defaultChartOptions.plugins, legend: { display: false } },
+                         scales: {
+                            y: { grid: { display: false }, ticks: { color: '#495057', font: { family: "'Inter', sans-serif" } } },
+                            x: {
+                                grid: { color: '#E9ECEF' },
+                                max: 100,
+                                ticks: {
+                                    color: '#495057', font: { family: "'Inter', sans-serif" },
+                                    callback: function(value) { return value + '%' }
+                                }
+                            }
+                         }
+                    }
+                });
+            }
+
+            const adultsBtn = document.getElementById('adults-btn');
+            const childrenBtn = document.getElementById('children-btn');
+            const adultsContent = document.getElementById('adults-content');
+            const childrenContent = document.getElementById('children-content');
+
+            if(adultsBtn && childrenBtn && adultsContent && childrenContent) {
+                adultsBtn.addEventListener('click', () => {
+                    adultsBtn.classList.add('active');
+                    childrenBtn.classList.remove('active');
+                    adultsContent.classList.add('active');
+                    childrenContent.classList.remove('active');
+                });
+
+                childrenBtn.addEventListener('click', () => {
+                    childrenBtn.classList.add('active');
+                    adultsBtn.classList.remove('active');
+                    childrenContent.classList.add('active');
+                    adultsContent.classList.remove('active');
+                });
+            }
+        });
+    </script>
+
+</body>
+</html>
